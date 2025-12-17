@@ -1,0 +1,1618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Duck Blaster - AR Gesture Shooter</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;500;700&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            overflow: hidden;
+            background: #0a0a0f;
+            font-family: 'Rajdhani', sans-serif;
+        }
+        
+        #loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 50%, #0a0a0f 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease-out;
+        }
+        
+        #loading-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .loading-title {
+            font-family: 'Orbitron', monospace;
+            font-size: 2.5rem;
+            font-weight: 900;
+            color: #ffd700;
+            text-shadow: 0 0 30px rgba(255, 215, 0, 0.5), 0 0 60px rgba(255, 215, 0, 0.3);
+            letter-spacing: 0.2em;
+            margin-bottom: 2rem;
+            animation: titlePulse 2s ease-in-out infinite;
+            text-align: center;
+        }
+        
+        @keyframes titlePulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.02); }
+        }
+        
+        .loading-container {
+            width: 300px;
+            height: 8px;
+            background: rgba(255, 215, 0, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+            border: 1px solid rgba(255, 215, 0, 0.3);
+        }
+        
+        .loading-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #ffd700, #ffaa00, #ffd700);
+            background-size: 200% 100%;
+            animation: loadingShimmer 1.5s ease-in-out infinite;
+            transition: width 0.3s ease-out;
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.8);
+        }
+        
+        @keyframes loadingShimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+        
+        .loading-status {
+            margin-top: 1.5rem;
+            font-size: 1rem;
+            color: rgba(255, 215, 0, 0.7);
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+        }
+        
+        .loading-hint {
+            margin-top: 3rem;
+            padding: 1.5rem 2rem;
+            background: rgba(255, 215, 0, 0.05);
+            border: 1px solid rgba(255, 215, 0, 0.2);
+            border-radius: 8px;
+            max-width: 400px;
+            text-align: center;
+        }
+        
+        .loading-hint h3 {
+            font-family: 'Orbitron', monospace;
+            color: #ff4444;
+            font-size: 0.9rem;
+            margin-bottom: 0.8rem;
+            letter-spacing: 0.15em;
+        }
+        
+        .loading-hint p {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.85rem;
+            line-height: 1.6;
+        }
+        
+        #game-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Stylized background instead of camera */
+        #game-background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(ellipse at 20% 80%, rgba(30, 60, 114, 0.4) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 20%, rgba(139, 69, 19, 0.3) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 50%, rgba(20, 20, 40, 1) 0%, rgba(5, 5, 15, 1) 100%);
+            overflow: hidden;
+        }
+        
+        /* Animated stars */
+        .star {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle 3s ease-in-out infinite;
+        }
+        
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+        
+        /* Grid lines for depth */
+        #grid-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(255, 215, 0, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 215, 0, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            perspective: 500px;
+            transform-style: preserve-3d;
+        }
+        
+        #video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        
+        #hud {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: none;
+            z-index: 100;
+        }
+        
+        .hud-panel {
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 215, 0, 0.4);
+            border-radius: 8px;
+            padding: 15px 25px;
+        }
+        
+        .hud-label {
+            font-family: 'Orbitron', monospace;
+            font-size: 0.7rem;
+            color: rgba(255, 215, 0, 0.6);
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+        }
+        
+        .hud-value {
+            font-family: 'Orbitron', monospace;
+            font-size: 2rem;
+            font-weight: 700;
+            color: #ffd700;
+            text-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+        }
+        
+        #accuracy-display {
+            text-align: right;
+        }
+        
+        #vfx-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 200;
+        }
+        
+        .hit-text {
+            position: absolute;
+            font-family: 'Orbitron', monospace;
+            font-size: 2rem;
+            font-weight: 900;
+            pointer-events: none;
+            animation: hitFloat 1s ease-out forwards;
+            text-shadow: 0 0 20px currentColor;
+        }
+        
+        .hit-text.hit {
+            color: #00ff88;
+        }
+        
+        .hit-text.miss {
+            color: #ff4444;
+        }
+        
+        @keyframes hitFloat {
+            0% {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+            100% {
+                opacity: 0;
+                transform: translateY(-80px) scale(1.5);
+            }
+        }
+        
+        #crosshair {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            pointer-events: none;
+            z-index: 150;
+            transform: translate(-50%, -50%);
+            transition: transform 0.1s ease-out;
+        }
+        
+        #crosshair svg {
+            width: 100%;
+            height: 100%;
+            filter: drop-shadow(0 0 10px rgba(255, 107, 53, 0.8));
+        }
+        
+        #crosshair.locked {
+            transform: translate(-50%, -50%) scale(0.8);
+        }
+        
+        #crosshair.locked svg {
+            filter: drop-shadow(0 0 20px rgba(0, 255, 136, 1));
+        }
+        
+        #laser-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 140;
+        }
+        
+        #gesture-indicator {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 215, 0, 0.4);
+            border-radius: 50px;
+            padding: 12px 30px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            z-index: 100;
+        }
+        
+        .gesture-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #333;
+            transition: all 0.2s ease;
+        }
+        
+        .gesture-dot.active {
+            background: #00ff88;
+            box-shadow: 0 0 15px rgba(0, 255, 136, 0.8);
+        }
+        
+        .gesture-label {
+            font-family: 'Orbitron', monospace;
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.6);
+            letter-spacing: 0.1em;
+        }
+        
+        #confidence-bar {
+            position: absolute;
+            bottom: 90px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 6px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 3px;
+            overflow: hidden;
+            z-index: 100;
+        }
+        
+        #confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff4444, #ffaa00, #00ff88);
+            transition: width 0.1s ease-out;
+            border-radius: 3px;
+        }
+        
+        #muzzle-flash {
+            position: absolute;
+            width: 100px;
+            height: 100px;
+            pointer-events: none;
+            z-index: 160;
+            transform: translate(-50%, -50%);
+            opacity: 0;
+            background: radial-gradient(circle, rgba(255, 200, 100, 1) 0%, rgba(255, 100, 50, 0.8) 30%, transparent 70%);
+            border-radius: 50%;
+            mix-blend-mode: screen;
+        }
+        
+        #muzzle-flash.flash {
+            animation: muzzleFlash 0.1s ease-out;
+        }
+        
+        @keyframes muzzleFlash {
+            0% { opacity: 1; transform: translate(-50%, -50%) scale(0.5); }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
+        }
+    </style>
+</head>
+<body>
+    <div id="loading-overlay">
+        <div class="loading-title">🦆 DUCK BLASTER 🦆</div>
+        <div class="loading-container">
+            <div class="loading-bar" id="loading-bar" style="width: 0%"></div>
+        </div>
+        <div class="loading-status" id="loading-status">INITIALIZING SYSTEMS...</div>
+        <div class="loading-hint">
+            <h3>🔫 HOW TO PLAY</h3>
+            <p><strong>Hand Gesture:</strong> Pistol shape + FLICK UP to fire!<br>
+            <strong>Mouse:</strong> Move to aim, click to shoot<br>
+            <strong>Keyboard:</strong> Spacebar to shoot<br><br>
+            <strong>Blast those ducks! 🦆</strong></p>
+        </div>
+    </div>
+    
+    <div id="game-container">
+        <div id="game-background"></div>
+        <div id="grid-overlay"></div>
+        <video id="video" autoplay playsinline></video>
+        <canvas id="canvas"></canvas>
+        <canvas id="laser-canvas"></canvas>
+        
+        <div id="crosshair">
+            <svg viewBox="0 0 60 60">
+                <circle cx="30" cy="30" r="25" fill="none" stroke="#ff6b35" stroke-width="2" opacity="0.5"/>
+                <circle cx="30" cy="30" r="15" fill="none" stroke="#ff6b35" stroke-width="2"/>
+                <circle cx="30" cy="30" r="3" fill="#ff6b35"/>
+                <line x1="30" y1="0" x2="30" y2="12" stroke="#ff6b35" stroke-width="2"/>
+                <line x1="30" y1="48" x2="30" y2="60" stroke="#ff6b35" stroke-width="2"/>
+                <line x1="0" y1="30" x2="12" y2="30" stroke="#ff6b35" stroke-width="2"/>
+                <line x1="48" y1="30" x2="60" y2="30" stroke="#ff6b35" stroke-width="2"/>
+            </svg>
+        </div>
+        
+        <div id="muzzle-flash"></div>
+        
+        <div id="hud">
+            <div class="hud-panel">
+                <div class="hud-label">SCORE</div>
+                <div class="hud-value" id="score-display">0</div>
+            </div>
+            <div class="hud-panel" id="accuracy-display">
+                <div class="hud-label">ACCURACY</div>
+                <div class="hud-value" id="accuracy-value">100%</div>
+            </div>
+        </div>
+        
+        <div id="vfx-container"></div>
+        
+        <div id="confidence-bar">
+            <div id="confidence-fill" style="width: 0%"></div>
+        </div>
+        
+        <div id="gesture-indicator">
+            <div class="gesture-dot" id="hand-dot"></div>
+            <span class="gesture-label">HAND</span>
+            <div class="gesture-dot" id="pistol-dot"></div>
+            <span class="gesture-label">PISTOL</span>
+            <div class="gesture-dot" id="trigger-dot"></div>
+            <span class="gesture-label">FLICK ↑</span>
+        </div>
+    </div>
+
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- MediaPipe Hands - PINNED VERSION 0.4.1646424915 -->
+    <script src="https://unpkg.com/@mediapipe/hands@0.4.1646424915/hands.js"></script>
+    <script src="https://unpkg.com/@mediapipe/camera_utils@0.3.1640029074/camera_utils.js"></script>
+
+    <script>
+        // ============================================
+        // GENERATE STARFIELD BACKGROUND
+        // ============================================
+        function generateStars() {
+            const bg = document.getElementById('game-background');
+            for (let i = 0; i < 100; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                star.style.left = Math.random() * 100 + '%';
+                star.style.top = Math.random() * 100 + '%';
+                star.style.animationDelay = Math.random() * 3 + 's';
+                star.style.width = (Math.random() * 2 + 1) + 'px';
+                star.style.height = star.style.width;
+                bg.appendChild(star);
+            }
+        }
+        generateStars();
+
+        // ============================================
+        // GAME STATE
+        // ============================================
+        const state = {
+            score: 0,
+            shots: 0,
+            hits: 0,
+            targets: [],
+            handDetected: false,
+            pistolGesture: false,
+            triggerPulled: false,
+            lastTriggerState: false,
+            aimPosition: { x: window.innerWidth / 2, y: window.innerHeight / 2 },
+            fingerTip: { x: 0, y: 0 },
+            wristPosition: { x: 0, y: 0 },
+            lockedTarget: null,
+            canShoot: true,
+            shootCooldown: 300,
+            lastDetectionTime: 0,
+            detectionInterval: 40, // ~25 FPS for detection
+            modelLoaded: false,
+            cameraReady: false,
+            
+            // Enhanced gesture tracking for accuracy
+            gestureConfidence: 0,
+            gestureHistory: [],
+            gestureHistorySize: 5,
+            landmarkSmoothing: [],
+            smoothingFactor: 0.4,
+            
+            // Temporal stability requirements
+            pistolStableFrames: 0,
+            triggerStableFrames: 0,
+            requiredStableFrames: 2,
+            
+            // Flick-up gesture detection (shoot by flicking gun upward)
+            positionHistory: [],
+            positionHistorySize: 5,
+            lastFlickTime: 0,
+            flickCooldown: 250, // ms between flicks
+            flickThreshold: 0.035 // velocity threshold for flick detection
+        };
+
+        // ============================================
+        // AUDIO SYSTEM (Web Audio API)
+        // ============================================
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playSound(type) {
+            const now = audioCtx.currentTime;
+            
+            if (type === 'shoot') {
+                // Gunshot sound
+                const noise = audioCtx.createBufferSource();
+                const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.15, audioCtx.sampleRate);
+                const noiseData = noiseBuffer.getChannelData(0);
+                for (let i = 0; i < noiseData.length; i++) {
+                    noiseData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (audioCtx.sampleRate * 0.02));
+                }
+                noise.buffer = noiseBuffer;
+                
+                const noiseFilter = audioCtx.createBiquadFilter();
+                noiseFilter.type = 'lowpass';
+                noiseFilter.frequency.value = 2000;
+                
+                const noiseGain = audioCtx.createGain();
+                noiseGain.gain.setValueAtTime(0.6, now);
+                noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                
+                noise.connect(noiseFilter);
+                noiseFilter.connect(noiseGain);
+                noiseGain.connect(audioCtx.destination);
+                noise.start(now);
+                
+                // Low thump
+                const osc = audioCtx.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.exponentialRampToValueAtTime(50, now + 0.1);
+                
+                const oscGain = audioCtx.createGain();
+                oscGain.gain.setValueAtTime(0.5, now);
+                oscGain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                
+                osc.connect(oscGain);
+                oscGain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.15);
+                
+            } else if (type === 'hit') {
+                // Satisfying impact sound
+                const noise = audioCtx.createBufferSource();
+                const noiseBuffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.3, audioCtx.sampleRate);
+                const noiseData = noiseBuffer.getChannelData(0);
+                for (let i = 0; i < noiseData.length; i++) {
+                    noiseData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (audioCtx.sampleRate * 0.05));
+                }
+                noise.buffer = noiseBuffer;
+                
+                const filter = audioCtx.createBiquadFilter();
+                filter.type = 'highpass';
+                filter.frequency.value = 3000;
+                
+                const gain = audioCtx.createGain();
+                gain.gain.setValueAtTime(0.4, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(audioCtx.destination);
+                noise.start(now);
+                
+                // Victory ping
+                const osc = audioCtx.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.value = 880;
+                
+                const oscGain = audioCtx.createGain();
+                oscGain.gain.setValueAtTime(0.3, now);
+                oscGain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                
+                osc.connect(oscGain);
+                oscGain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.25);
+                
+            } else if (type === 'miss') {
+                // Whoosh sound
+                const osc = audioCtx.createOscillator();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.exponentialRampToValueAtTime(100, now + 0.2);
+                
+                const filter = audioCtx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.value = 500;
+                
+                const gain = audioCtx.createGain();
+                gain.gain.setValueAtTime(0.15, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                
+                osc.connect(filter);
+                filter.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.25);
+            }
+        }
+
+        // ============================================
+        // THREE.JS SETUP
+        // ============================================
+        const canvas = document.getElementById('canvas');
+        const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 5;
+        
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(5, 5, 5);
+        scene.add(directionalLight);
+        
+        const pointLight = new THREE.PointLight(0xffd700, 0.5, 100);
+        pointLight.position.set(0, 0, 3);
+        scene.add(pointLight);
+
+        // ============================================
+        // DUCK TEXTURE (canvas drawn)
+        // ============================================
+        const textureLoader = new THREE.TextureLoader();
+        
+        // Create cute duck face texture from canvas
+        function createDuckTexture() {
+            const size = 256;
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            
+            // Sky blue background circle
+            ctx.beginPath();
+            ctx.arc(size/2, size/2, size/2, 0, Math.PI * 2);
+            ctx.fillStyle = '#87CEEB';
+            ctx.fill();
+            
+            // Duck body (yellow)
+            ctx.beginPath();
+            ctx.ellipse(size/2, size/2 + 20, size/2.5, size/2.8, 0, 0, Math.PI * 2);
+            ctx.fillStyle = '#FFD93D';
+            ctx.fill();
+            
+            // Duck head (yellow, slightly lighter)
+            ctx.beginPath();
+            ctx.arc(size/2, size/2 - 30, 55, 0, Math.PI * 2);
+            ctx.fillStyle = '#FFE566';
+            ctx.fill();
+            
+            // Beak (orange)
+            ctx.beginPath();
+            ctx.moveTo(size/2 - 25, size/2 - 15);
+            ctx.lineTo(size/2, size/2 + 10);
+            ctx.lineTo(size/2 + 25, size/2 - 15);
+            ctx.closePath();
+            ctx.fillStyle = '#FF8C00';
+            ctx.fill();
+            
+            // Beak upper part
+            ctx.beginPath();
+            ctx.ellipse(size/2, size/2 - 20, 30, 12, 0, 0, Math.PI * 2);
+            ctx.fillStyle = '#FFA500';
+            ctx.fill();
+            
+            // Eyes (white with black pupil)
+            // Left eye
+            ctx.beginPath();
+            ctx.arc(size/2 - 25, size/2 - 50, 18, 0, Math.PI * 2);
+            ctx.fillStyle = 'white';
+            ctx.fill();
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            // Left pupil
+            ctx.beginPath();
+            ctx.arc(size/2 - 22, size/2 - 48, 8, 0, Math.PI * 2);
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fill();
+            
+            // Left eye shine
+            ctx.beginPath();
+            ctx.arc(size/2 - 25, size/2 - 52, 4, 0, Math.PI * 2);
+            ctx.fillStyle = 'white';
+            ctx.fill();
+            
+            // Right eye
+            ctx.beginPath();
+            ctx.arc(size/2 + 25, size/2 - 50, 18, 0, Math.PI * 2);
+            ctx.fillStyle = 'white';
+            ctx.fill();
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            
+            // Right pupil
+            ctx.beginPath();
+            ctx.arc(size/2 + 28, size/2 - 48, 8, 0, Math.PI * 2);
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fill();
+            
+            // Right eye shine
+            ctx.beginPath();
+            ctx.arc(size/2 + 25, size/2 - 52, 4, 0, Math.PI * 2);
+            ctx.fillStyle = 'white';
+            ctx.fill();
+            
+            // Eyebrows (cute arched)
+            ctx.strokeStyle = '#CC8800';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.arc(size/2 - 25, size/2 - 65, 12, Math.PI * 0.2, Math.PI * 0.8);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(size/2 + 25, size/2 - 65, 12, Math.PI * 0.2, Math.PI * 0.8);
+            ctx.stroke();
+            
+            // Wing hint on side
+            ctx.beginPath();
+            ctx.ellipse(size/2 + 60, size/2 + 40, 25, 40, 0.3, 0, Math.PI * 2);
+            ctx.fillStyle = '#E6C200';
+            ctx.fill();
+            
+            // Target ring (orange for ducks)
+            ctx.strokeStyle = '#FF6B35';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.arc(size/2, size/2, size/2 - 10, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            // Target crosshairs
+            ctx.strokeStyle = 'rgba(255, 107, 53, 0.4)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(size/2, 10);
+            ctx.lineTo(size/2, size - 10);
+            ctx.moveTo(10, size/2);
+            ctx.lineTo(size - 10, size/2);
+            ctx.stroke();
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            return texture;
+        }
+        
+        const duckTexture = createDuckTexture();
+
+        // ============================================
+        // DUCK TARGET CLASS
+        // ============================================
+        class DuckTarget {
+            constructor() {
+                // Create circular plane with duck face
+                const geometry = new THREE.CircleGeometry(0.5, 32);
+                
+                const material = new THREE.MeshBasicMaterial({
+                    map: duckTexture,
+                    side: THREE.DoubleSide,
+                    transparent: true
+                });
+                
+                this.mesh = new THREE.Mesh(geometry, material);
+                
+                // Add glowing ring (orange for ducks)
+                const ringGeometry = new THREE.RingGeometry(0.52, 0.58, 32);
+                const ringMaterial = new THREE.MeshBasicMaterial({
+                    color: 0xff6b35,
+                    side: THREE.DoubleSide,
+                    transparent: true,
+                    opacity: 0.8
+                });
+                this.ring = new THREE.Mesh(ringGeometry, ringMaterial);
+                this.mesh.add(this.ring);
+                
+                // Spawn from random edge
+                this.spawnFromEdge();
+                
+                // Target is center with some variation
+                this.targetX = (Math.random() - 0.5) * 2;
+                this.targetY = (Math.random() - 0.5) * 2;
+                this.targetZ = Math.random() * 2 + 1;
+                
+                // Calculate velocity toward center
+                const speed = 0.012 + Math.random() * 0.008;
+                const dx = this.targetX - this.mesh.position.x;
+                const dy = this.targetY - this.mesh.position.y;
+                const dz = this.targetZ - this.mesh.position.z;
+                const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                
+                this.velocity = {
+                    x: (dx / dist) * speed,
+                    y: (dy / dist) * speed,
+                    z: (dz / dist) * speed
+                };
+                
+                // Rotation speed
+                this.rotationSpeed = (Math.random() - 0.5) * 0.02;
+                this.wobbleOffset = Math.random() * Math.PI * 2;
+                
+                this.alive = true;
+                this.screenPos = { x: 0, y: 0 };
+                
+                scene.add(this.mesh);
+            }
+            
+            spawnFromEdge() {
+                const edge = Math.floor(Math.random() * 4);
+                const spread = 4;
+                const zPos = 4 + Math.random() * 2;
+                
+                switch(edge) {
+                    case 0: // Top
+                        this.mesh.position.set((Math.random() - 0.5) * spread * 2, spread, zPos);
+                        break;
+                    case 1: // Bottom
+                        this.mesh.position.set((Math.random() - 0.5) * spread * 2, -spread, zPos);
+                        break;
+                    case 2: // Left
+                        this.mesh.position.set(-spread, (Math.random() - 0.5) * spread * 2, zPos);
+                        break;
+                    case 3: // Right
+                        this.mesh.position.set(spread, (Math.random() - 0.5) * spread * 2, zPos);
+                        break;
+                }
+            }
+            
+            update() {
+                if (!this.alive) return;
+                
+                // Move toward target
+                this.mesh.position.x += this.velocity.x;
+                this.mesh.position.y += this.velocity.y;
+                this.mesh.position.z += this.velocity.z;
+                
+                // Subtle wobble
+                const time = Date.now() * 0.002 + this.wobbleOffset;
+                this.mesh.rotation.x = Math.sin(time) * 0.1;
+                this.mesh.rotation.y = Math.cos(time * 0.7) * 0.1;
+                this.mesh.rotation.z += this.rotationSpeed;
+                
+                // Pulse the ring
+                const pulse = 0.8 + Math.sin(time * 3) * 0.2;
+                this.ring.material.opacity = pulse;
+                
+                // Calculate screen position
+                const vector = this.mesh.position.clone();
+                vector.project(camera);
+                this.screenPos.x = (vector.x + 1) / 2 * window.innerWidth;
+                this.screenPos.y = (-vector.y + 1) / 2 * window.innerHeight;
+                
+                // Check if passed through center
+                if (this.mesh.position.z < 0.5) {
+                    this.destroy();
+                }
+            }
+            
+            destroy() {
+                this.alive = false;
+                scene.remove(this.mesh);
+            }
+            
+            getScreenRadius() {
+                // Approximate screen radius based on z position
+                const zFactor = 5 / (this.mesh.position.z + 2);
+                return 60 * zFactor;
+            }
+        }
+
+        // ============================================
+        // PARTICLE SYSTEM FOR EXPLOSIONS
+        // ============================================
+        const particles = [];
+        
+        class Particle {
+            constructor(x, y, z, color) {
+                const geometry = new THREE.SphereGeometry(0.05, 8, 8);
+                const material = new THREE.MeshBasicMaterial({
+                    color: color,
+                    transparent: true,
+                    opacity: 1
+                });
+                this.mesh = new THREE.Mesh(geometry, material);
+                this.mesh.position.set(x, y, z);
+                
+                // Random velocity
+                this.velocity = {
+                    x: (Math.random() - 0.5) * 0.25,
+                    y: (Math.random() - 0.5) * 0.25,
+                    z: (Math.random() - 0.5) * 0.25
+                };
+                
+                this.life = 1;
+                this.decay = 0.02 + Math.random() * 0.02;
+                
+                scene.add(this.mesh);
+            }
+            
+            update() {
+                this.mesh.position.x += this.velocity.x;
+                this.mesh.position.y += this.velocity.y;
+                this.mesh.position.z += this.velocity.z;
+                
+                this.velocity.y -= 0.005; // Gravity
+                
+                this.life -= this.decay;
+                this.mesh.material.opacity = this.life;
+                
+                if (this.life <= 0) {
+                    scene.remove(this.mesh);
+                    return false;
+                }
+                return true;
+            }
+        }
+        
+        function createExplosion(x, y, z) {
+            // Yellow and orange feather particles for duck hit!
+            const colors = [0xFFD93D, 0xFFE566, 0xFFA500, 0xFF8C00, 0xFFFF00, 0x87CEEB];
+            for (let i = 0; i < 25; i++) {
+                const color = colors[Math.floor(Math.random() * colors.length)];
+                particles.push(new Particle(x, y, z, color));
+            }
+        }
+
+        // ============================================
+        // LASER CANVAS
+        // ============================================
+        const laserCanvas = document.getElementById('laser-canvas');
+        const laserCtx = laserCanvas.getContext('2d');
+        laserCanvas.width = window.innerWidth;
+        laserCanvas.height = window.innerHeight;
+        
+        function drawLaser() {
+            laserCtx.clearRect(0, 0, laserCanvas.width, laserCanvas.height);
+            
+            // Only draw laser if hand detected with pistol gesture
+            if (!state.handDetected || !state.pistolGesture) return;
+            
+            const startX = state.wristPosition.x;
+            const startY = state.wristPosition.y;
+            const endX = state.aimPosition.x;
+            const endY = state.aimPosition.y;
+            
+            // Main laser beam
+            const gradient = laserCtx.createLinearGradient(startX, startY, endX, endY);
+            gradient.addColorStop(0, 'rgba(255, 50, 50, 0)');
+            gradient.addColorStop(0.3, 'rgba(255, 50, 50, 0.8)');
+            gradient.addColorStop(1, 'rgba(255, 100, 100, 1)');
+            
+            laserCtx.strokeStyle = gradient;
+            laserCtx.lineWidth = 2;
+            laserCtx.lineCap = 'round';
+            
+            laserCtx.beginPath();
+            laserCtx.moveTo(startX, startY);
+            laserCtx.lineTo(endX, endY);
+            laserCtx.stroke();
+            
+            // Glow effect
+            laserCtx.strokeStyle = 'rgba(255, 100, 100, 0.3)';
+            laserCtx.lineWidth = 8;
+            laserCtx.beginPath();
+            laserCtx.moveTo(startX, startY);
+            laserCtx.lineTo(endX, endY);
+            laserCtx.stroke();
+            
+            // Dot at aim point
+            if (state.lockedTarget) {
+                laserCtx.fillStyle = 'rgba(0, 255, 136, 0.8)';
+            } else {
+                laserCtx.fillStyle = 'rgba(255, 100, 100, 0.8)';
+            }
+            laserCtx.beginPath();
+            laserCtx.arc(endX, endY, 4, 0, Math.PI * 2);
+            laserCtx.fill();
+        }
+
+        // ============================================
+        // GAME LOGIC
+        // ============================================
+        function spawnTargets() {
+            while (state.targets.length < 4) {
+                state.targets.push(new DuckTarget());
+            }
+        }
+        
+        function updateTargets() {
+            state.targets = state.targets.filter(target => {
+                target.update();
+                return target.alive;
+            });
+            spawnTargets();
+        }
+        
+        function findNearestTarget(x, y, maxDist = 150) {
+            let nearest = null;
+            let minDist = maxDist;
+            
+            for (const target of state.targets) {
+                if (!target.alive) continue;
+                
+                const dx = target.screenPos.x - x;
+                const dy = target.screenPos.y - y;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                
+                // Adjust for target size on screen
+                const adjustedDist = dist - target.getScreenRadius() * 0.5;
+                
+                if (adjustedDist < minDist) {
+                    minDist = adjustedDist;
+                    nearest = target;
+                }
+            }
+            
+            return nearest;
+        }
+        
+        function magneticAimAssist() {
+            // Always try aim assist (works with mouse too)
+            const nearest = findNearestTarget(state.fingerTip.x, state.fingerTip.y);
+            
+            if (nearest) {
+                state.lockedTarget = nearest;
+                
+                // Smoothly attract crosshair to target
+                const attraction = 0.35;
+                state.aimPosition.x = state.fingerTip.x + (nearest.screenPos.x - state.fingerTip.x) * attraction;
+                state.aimPosition.y = state.fingerTip.y + (nearest.screenPos.y - state.fingerTip.y) * attraction;
+            } else {
+                state.lockedTarget = null;
+                state.aimPosition.x = state.fingerTip.x;
+                state.aimPosition.y = state.fingerTip.y;
+            }
+        }
+        
+        function shoot() {
+            if (!state.canShoot) return;
+            
+            state.canShoot = false;
+            state.shots++;
+            
+            playSound('shoot');
+            
+            // Muzzle flash
+            const muzzleFlash = document.getElementById('muzzle-flash');
+            muzzleFlash.style.left = state.fingerTip.x + 'px';
+            muzzleFlash.style.top = state.fingerTip.y + 'px';
+            muzzleFlash.classList.remove('flash');
+            void muzzleFlash.offsetWidth; // Trigger reflow
+            muzzleFlash.classList.add('flash');
+            
+            // Check for hit
+            const hitTarget = findNearestTarget(state.aimPosition.x, state.aimPosition.y, 90);
+            
+            if (hitTarget) {
+                // HIT!
+                state.hits++;
+                state.score += 100;
+                
+                playSound('hit');
+                createExplosion(
+                    hitTarget.mesh.position.x,
+                    hitTarget.mesh.position.y,
+                    hitTarget.mesh.position.z
+                );
+                
+                showVFXText('🦆 QUACK!', hitTarget.screenPos.x, hitTarget.screenPos.y, true);
+                hitTarget.destroy();
+                
+            } else {
+                // MISS
+                playSound('miss');
+                showVFXText('MISS', state.aimPosition.x, state.aimPosition.y, false);
+            }
+            
+            updateHUD();
+            
+            setTimeout(() => {
+                state.canShoot = true;
+            }, state.shootCooldown);
+        }
+        
+        function showVFXText(text, x, y, isHit) {
+            const vfxContainer = document.getElementById('vfx-container');
+            const textEl = document.createElement('div');
+            textEl.className = `hit-text ${isHit ? 'hit' : 'miss'}`;
+            textEl.textContent = text;
+            textEl.style.left = x + 'px';
+            textEl.style.top = y + 'px';
+            vfxContainer.appendChild(textEl);
+            
+            setTimeout(() => textEl.remove(), 1000);
+        }
+        
+        function updateHUD() {
+            document.getElementById('score-display').textContent = state.score;
+            const accuracy = state.shots > 0 ? Math.round((state.hits / state.shots) * 100) : 100;
+            document.getElementById('accuracy-value').textContent = accuracy + '%';
+        }
+        
+        function updateCrosshair() {
+            const crosshair = document.getElementById('crosshair');
+            crosshair.style.left = state.aimPosition.x + 'px';
+            crosshair.style.top = state.aimPosition.y + 'px';
+            
+            if (state.lockedTarget) {
+                crosshair.classList.add('locked');
+                crosshair.querySelector('svg').innerHTML = `
+                    <circle cx="30" cy="30" r="25" fill="none" stroke="#00ff88" stroke-width="2" opacity="0.5"/>
+                    <circle cx="30" cy="30" r="15" fill="none" stroke="#00ff88" stroke-width="3"/>
+                    <circle cx="30" cy="30" r="3" fill="#00ff88"/>
+                    <line x1="30" y1="0" x2="30" y2="12" stroke="#00ff88" stroke-width="2"/>
+                    <line x1="30" y1="48" x2="30" y2="60" stroke="#00ff88" stroke-width="2"/>
+                    <line x1="0" y1="30" x2="12" y2="30" stroke="#00ff88" stroke-width="2"/>
+                    <line x1="48" y1="30" x2="60" y2="30" stroke="#00ff88" stroke-width="2"/>
+                `;
+            } else {
+                crosshair.classList.remove('locked');
+                crosshair.querySelector('svg').innerHTML = `
+                    <circle cx="30" cy="30" r="25" fill="none" stroke="#ff6b35" stroke-width="2" opacity="0.5"/>
+                    <circle cx="30" cy="30" r="15" fill="none" stroke="#ff6b35" stroke-width="2"/>
+                    <circle cx="30" cy="30" r="3" fill="#ff6b35"/>
+                    <line x1="30" y1="0" x2="30" y2="12" stroke="#ff6b35" stroke-width="2"/>
+                    <line x1="30" y1="48" x2="30" y2="60" stroke="#ff6b35" stroke-width="2"/>
+                    <line x1="0" y1="30" x2="12" y2="30" stroke="#ff6b35" stroke-width="2"/>
+                    <line x1="48" y1="30" x2="60" y2="30" stroke="#ff6b35" stroke-width="2"/>
+                `;
+            }
+            
+            // Always show crosshair (works with mouse too)
+            crosshair.style.display = 'block';
+        }
+        
+        function updateGestureIndicator() {
+            document.getElementById('hand-dot').classList.toggle('active', state.handDetected);
+            document.getElementById('pistol-dot').classList.toggle('active', state.pistolGesture);
+            document.getElementById('trigger-dot').classList.toggle('active', state.triggerPulled);
+            
+            // Update confidence bar
+            document.getElementById('confidence-fill').style.width = (state.gestureConfidence * 100) + '%';
+        }
+
+        // ============================================
+        // ENHANCED GESTURE RECOGNITION
+        // ============================================
+        
+        // Smooth landmark positions over time
+        function smoothLandmarks(newLandmarks) {
+            if (state.landmarkSmoothing.length === 0) {
+                state.landmarkSmoothing = newLandmarks.map(l => ({x: l.x, y: l.y, z: l.z}));
+                return state.landmarkSmoothing;
+            }
+            
+            const smoothed = newLandmarks.map((l, i) => ({
+                x: state.landmarkSmoothing[i].x * state.smoothingFactor + l.x * (1 - state.smoothingFactor),
+                y: state.landmarkSmoothing[i].y * state.smoothingFactor + l.y * (1 - state.smoothingFactor),
+                z: state.landmarkSmoothing[i].z * state.smoothingFactor + l.z * (1 - state.smoothingFactor)
+            }));
+            
+            state.landmarkSmoothing = smoothed;
+            return smoothed;
+        }
+        
+        // Calculate angle between three points
+        function calculateAngle(p1, p2, p3) {
+            const v1 = { x: p1.x - p2.x, y: p1.y - p2.y };
+            const v2 = { x: p3.x - p2.x, y: p3.y - p2.y };
+            
+            const dot = v1.x * v2.x + v1.y * v2.y;
+            const cross = v1.x * v2.y - v1.y * v2.x;
+            
+            return Math.atan2(cross, dot) * (180 / Math.PI);
+        }
+        
+        // Calculate distance between two points
+        function distance(p1, p2) {
+            const dx = p1.x - p2.x;
+            const dy = p1.y - p2.y;
+            const dz = (p1.z || 0) - (p2.z || 0);
+            return Math.sqrt(dx*dx + dy*dy + dz*dz);
+        }
+        
+        // Check if finger is extended
+        function isFingerExtended(tip, pip, mcp, wrist) {
+            // Finger is extended if tip is farther from wrist than pip
+            const tipDist = distance(tip, wrist);
+            const pipDist = distance(pip, wrist);
+            const mcpDist = distance(mcp, wrist);
+            
+            // Also check the angle - extended fingers have straighter angles
+            const angle = Math.abs(calculateAngle(tip, pip, mcp));
+            
+            return tipDist > pipDist * 0.9 && angle > 140;
+        }
+        
+        // Check if finger is curled
+        function isFingerCurled(tip, pip, mcp, wrist) {
+            // Finger is curled if tip is closer to wrist/palm than pip
+            const tipDist = distance(tip, wrist);
+            const pipDist = distance(pip, wrist);
+            
+            // Also check the angle - curled fingers have tighter angles
+            const angle = Math.abs(calculateAngle(tip, pip, mcp));
+            
+            return tipDist < pipDist * 1.1 || angle < 120;
+        }
+        
+        // Add to gesture history for temporal stability
+        function addToGestureHistory(isPistol, isTrigger) {
+            state.gestureHistory.push({ pistol: isPistol, trigger: isTrigger, time: Date.now() });
+            
+            // Keep only recent history
+            if (state.gestureHistory.length > state.gestureHistorySize) {
+                state.gestureHistory.shift();
+            }
+        }
+        
+        // Get stable gesture state from history
+        function getStableGesture() {
+            if (state.gestureHistory.length < state.requiredStableFrames) {
+                return { pistol: false, trigger: false };
+            }
+            
+            const recent = state.gestureHistory.slice(-state.requiredStableFrames);
+            const pistolCount = recent.filter(g => g.pistol).length;
+            const triggerCount = recent.filter(g => g.trigger).length;
+            
+            return {
+                pistol: pistolCount >= state.requiredStableFrames,
+                trigger: triggerCount >= state.requiredStableFrames
+            };
+        }
+
+        // ============================================
+        // MEDIAPIPE HANDS SETUP
+        // ============================================
+        const video = document.getElementById('video');
+        let hands;
+        
+        function updateLoadingProgress(percent, status) {
+            document.getElementById('loading-bar').style.width = percent + '%';
+            document.getElementById('loading-status').textContent = status;
+        }
+        
+        async function initMediaPipe() {
+            updateLoadingProgress(10, 'INITIALIZING CAMERA...');
+            
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user', width: 1280, height: 720 }
+                });
+                video.srcObject = stream;
+                await video.play();
+                state.cameraReady = true;
+                
+                updateLoadingProgress(30, 'LOADING AI MODEL...');
+                
+                hands = new Hands({
+                    locateFile: (file) => {
+                        return `https://unpkg.com/@mediapipe/hands@0.4.1646424915/${file}`;
+                    }
+                });
+                
+                hands.setOptions({
+                    maxNumHands: 1,
+                    modelComplexity: 1,
+                    minDetectionConfidence: 0.75,
+                    minTrackingConfidence: 0.6
+                });
+                
+                hands.onResults(onResults);
+                
+                updateLoadingProgress(60, 'WARMING UP AI...');
+                
+                // Warm up the model with a few frames
+                const warmupCanvas = document.createElement('canvas');
+                warmupCanvas.width = video.videoWidth || 640;
+                warmupCanvas.height = video.videoHeight || 480;
+                const warmupCtx = warmupCanvas.getContext('2d');
+                
+                for (let i = 0; i < 5; i++) {
+                    warmupCtx.drawImage(video, 0, 0);
+                    await hands.send({ image: warmupCanvas });
+                    updateLoadingProgress(60 + (i + 1) * 7, 'CALIBRATING...');
+                }
+                
+                state.modelLoaded = true;
+                updateLoadingProgress(100, 'READY!');
+                
+                setTimeout(() => {
+                    document.getElementById('loading-overlay').classList.add('hidden');
+                    startGame();
+                }, 500);
+                
+            } catch (error) {
+                console.error('Initialization error:', error);
+                updateLoadingProgress(100, 'CAMERA UNAVAILABLE - MOUSE MODE');
+                
+                // Start game anyway in mouse-only mode
+                setTimeout(() => {
+                    document.getElementById('loading-overlay').classList.add('hidden');
+                    startGame();
+                }, 1000);
+            }
+        }
+        
+        function onResults(results) {
+            try {
+                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                    const landmarks = results.multiHandLandmarks[0];
+                    processHandLandmarks(landmarks);
+                } else {
+                    state.handDetected = false;
+                    state.pistolGesture = false;
+                    state.triggerPulled = false;
+                    state.gestureConfidence = 0;
+                    state.landmarkSmoothing = [];
+                    state.gestureHistory = [];
+                    state.positionHistory = []; // Clear flick history when hand lost
+                }
+            } catch (error) {
+                console.error('Error processing results:', error);
+            }
+        }
+        
+        function processHandLandmarks(rawLandmarks) {
+            state.handDetected = true;
+            
+            // Apply smoothing
+            const landmarks = smoothLandmarks(rawLandmarks);
+            
+            // Key landmarks
+            const wrist = landmarks[0];
+            const thumbCMC = landmarks[1];
+            const thumbMCP = landmarks[2];
+            const thumbIP = landmarks[3];
+            const thumbTip = landmarks[4];
+            
+            const indexMCP = landmarks[5];
+            const indexPIP = landmarks[6];
+            const indexDIP = landmarks[7];
+            const indexTip = landmarks[8];
+            
+            const middleMCP = landmarks[9];
+            const middlePIP = landmarks[10];
+            const middleDIP = landmarks[11];
+            const middleTip = landmarks[12];
+            
+            const ringMCP = landmarks[13];
+            const ringPIP = landmarks[14];
+            const ringDIP = landmarks[15];
+            const ringTip = landmarks[16];
+            
+            const pinkyMCP = landmarks[17];
+            const pinkyPIP = landmarks[18];
+            const pinkyDIP = landmarks[19];
+            const pinkyTip = landmarks[20];
+            
+            // Convert to screen coordinates (mirrored)
+            const toScreen = (landmark) => ({
+                x: (1 - landmark.x) * window.innerWidth,
+                y: landmark.y * window.innerHeight
+            });
+            
+            const indexTipScreen = toScreen(indexTip);
+            const wristScreen = toScreen(wrist);
+            
+            state.fingerTip = indexTipScreen;
+            state.wristPosition = wristScreen;
+            
+            // ============================================
+            // ENHANCED PISTOL GESTURE DETECTION
+            // ============================================
+            
+            // Check index finger extension using multiple criteria
+            const indexExtended = isFingerExtended(indexTip, indexPIP, indexMCP, wrist);
+            const indexAngle = Math.abs(calculateAngle(indexTip, indexPIP, indexMCP));
+            const indexScore = indexExtended ? 1 : (indexAngle > 150 ? 0.7 : 0);
+            
+            // Check if other fingers are curled
+            const middleCurled = isFingerCurled(middleTip, middlePIP, middleMCP, wrist);
+            const middleAngle = Math.abs(calculateAngle(middleTip, middlePIP, middleMCP));
+            const middleScore = middleCurled ? 1 : (middleAngle < 130 ? 0.5 : 0);
+            
+            const ringCurled = isFingerCurled(ringTip, ringPIP, ringMCP, wrist);
+            const ringAngle = Math.abs(calculateAngle(ringTip, ringPIP, ringMCP));
+            const ringScore = ringCurled ? 1 : (ringAngle < 130 ? 0.5 : 0);
+            
+            const pinkyCurled = isFingerCurled(pinkyTip, pinkyPIP, pinkyMCP, wrist);
+            const pinkyAngle = Math.abs(calculateAngle(pinkyTip, pinkyPIP, pinkyMCP));
+            const pinkyScore = pinkyCurled ? 1 : (pinkyAngle < 130 ? 0.5 : 0);
+            
+            // Additional check: index should be pointing away from palm
+            const palmCenter = {
+                x: (indexMCP.x + middleMCP.x + ringMCP.x + pinkyMCP.x) / 4,
+                y: (indexMCP.y + middleMCP.y + ringMCP.y + pinkyMCP.y) / 4,
+                z: (indexMCP.z + middleMCP.z + ringMCP.z + pinkyMCP.z) / 4
+            };
+            const indexDirection = distance(indexTip, palmCenter) > distance(indexMCP, palmCenter);
+            const directionScore = indexDirection ? 1 : 0.3;
+            
+            // Calculate overall pistol confidence
+            const pistolConfidence = (indexScore * 0.35 + middleScore * 0.2 + ringScore * 0.15 + 
+                                      pinkyScore * 0.15 + directionScore * 0.15);
+            
+            state.gestureConfidence = pistolConfidence;
+            
+            // Raw pistol detection - SIMPLIFIED threshold
+            const rawPistolDetected = pistolConfidence > 0.4;
+            
+            // ============================================
+            // FLICK-UP TRIGGER DETECTION
+            // Shoot by rapidly moving the gun upward (like recoil)
+            // ============================================
+            
+            // Track hand position over time for velocity calculation
+            const now = Date.now();
+            state.positionHistory.push({
+                y: wrist.y,  // Use wrist Y position (normalized 0-1)
+                time: now
+            });
+            
+            // Keep only recent history
+            while (state.positionHistory.length > state.positionHistorySize) {
+                state.positionHistory.shift();
+            }
+            
+            // Calculate upward velocity (negative Y change = upward movement)
+            let flickDetected = false;
+            if (state.positionHistory.length >= 3) {
+                const recent = state.positionHistory;
+                const oldest = recent[0];
+                const newest = recent[recent.length - 1];
+                const timeDelta = (newest.time - oldest.time) / 1000; // seconds
+                
+                if (timeDelta > 0) {
+                    // Y decreases when moving up in normalized coords
+                    const yVelocity = (oldest.y - newest.y) / timeDelta;
+                    
+                    // Check for rapid upward movement
+                    if (yVelocity > state.flickThreshold && 
+                        now - state.lastFlickTime > state.flickCooldown) {
+                        flickDetected = true;
+                        state.lastFlickTime = now;
+                    }
+                }
+            }
+            
+            // ============================================
+            // PISTOL GESTURE STABILITY
+            // ============================================
+            
+            // Update pistol state with simple hysteresis
+            if (rawPistolDetected) {
+                state.pistolStableFrames = Math.min(state.pistolStableFrames + 1, 10);
+            } else {
+                state.pistolStableFrames = Math.max(state.pistolStableFrames - 2, 0);
+            }
+            
+            // Apply hysteresis - easier to activate
+            state.pistolGesture = state.pistolStableFrames >= 1;
+            
+            // Fire on flick when pistol gesture is active
+            if (flickDetected && state.pistolGesture) {
+                state.triggerPulled = true;
+                shoot();
+                // Clear position history after shot to prevent double-firing
+                state.positionHistory = [];
+            } else {
+                state.triggerPulled = false;
+            }
+        }
+        
+        // ============================================
+        // DETECTION LOOP (THROTTLED)
+        // ============================================
+        async function detectionLoop() {
+            if (!state.modelLoaded || !state.cameraReady) {
+                requestAnimationFrame(detectionLoop);
+                return;
+            }
+            
+            const now = performance.now();
+            
+            if (now - state.lastDetectionTime >= state.detectionInterval) {
+                state.lastDetectionTime = now;
+                
+                try {
+                    await hands.send({ image: video });
+                } catch (error) {
+                    console.error('Detection error:', error);
+                }
+            }
+            
+            requestAnimationFrame(detectionLoop);
+        }
+
+        // ============================================
+        // RENDER LOOP (60 FPS)
+        // ============================================
+        function render() {
+            // Update game logic
+            updateTargets();
+            magneticAimAssist();
+            
+            // Update particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                if (!particles[i].update()) {
+                    particles.splice(i, 1);
+                }
+            }
+            
+            // Update UI
+            updateCrosshair();
+            updateGestureIndicator();
+            drawLaser();
+            
+            // Render Three.js scene
+            renderer.render(scene, camera);
+            
+            requestAnimationFrame(render);
+        }
+        
+        // ============================================
+        // MOUSE/KEYBOARD CONTROLS (FALLBACK)
+        // ============================================
+        let mouseX = window.innerWidth / 2;
+        let mouseY = window.innerHeight / 2;
+        
+        document.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+            
+            // If no hand detected, use mouse for aiming
+            if (!state.handDetected) {
+                state.fingerTip = { x: mouseX, y: mouseY };
+                state.wristPosition = { x: mouseX + 100, y: mouseY + 150 };
+                state.aimPosition = { x: mouseX, y: mouseY };
+            }
+        });
+        
+        document.addEventListener('click', (e) => {
+            // Resume audio on click
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            
+            // Always allow mouse click to shoot
+            if (!state.handDetected) {
+                state.fingerTip = { x: e.clientX, y: e.clientY };
+                state.aimPosition = { x: e.clientX, y: e.clientY };
+                state.pistolGesture = true;
+            }
+            shoot();
+        });
+        
+        document.addEventListener('keydown', (e) => {
+            // Spacebar to shoot
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (!state.handDetected) {
+                    state.fingerTip = { x: mouseX, y: mouseY };
+                    state.aimPosition = { x: mouseX, y: mouseY };
+                    state.pistolGesture = true;
+                }
+                shoot();
+            }
+        });
+
+        // ============================================
+        // START GAME
+        // ============================================
+        function startGame() {
+            spawnTargets();
+            render();
+            detectionLoop();
+        }
+        
+        // ============================================
+        // WINDOW RESIZE
+        // ============================================
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            laserCanvas.width = window.innerWidth;
+            laserCanvas.height = window.innerHeight;
+        });
+        
+        // ============================================
+        // INITIALIZE
+        // ============================================
+        initMediaPipe();
+    </script>
+</body>
+</html>
